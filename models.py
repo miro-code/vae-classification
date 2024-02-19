@@ -6,6 +6,11 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as T
 from torchvision.datasets import MNIST
 
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+
+import time
+
 class Encoder(nn.Module):
     def __init__(self, in_channels, latent_dim, hidden_channels):
         #Todo make work for not 32x32 images: change self.mu and self.logvar input dims
@@ -145,7 +150,7 @@ def mnist_demo():
     hidden_channels = [32, 64, 128, 256, 512]
     lr = 1e-3
     beta = 1
-    vae_epochs = 30
+    vae_epochs = 100
     
 
     transform = T.Compose([T.Resize((32, 32)), T.ToTensor()])
@@ -200,21 +205,24 @@ def mnist_demo():
 
     #stratified split of the data
     from sklearn.model_selection import train_test_split
-    train_latents, _, train_labels, _ = train_test_split(train_latents, train_labels, test_size=0.99, stratify=train_labels)
+    train_latents, val_latents, train_labels, val_labels = train_test_split(train_latents, train_labels, test_size=0.999, stratify=train_labels)
+    val_latents, _ , val_labels, _ = train_test_split(val_latents, val_labels, test_size=0.9, stratify=val_labels)
 
     print("Number of training samples: ", len(train_latents))
+    print("Number of validation samples: ", len(val_latents))
     # Load latents into datasets
     train_latent_dataset = LatentDataset(train_latents, train_labels)
     test_latent_dataset = LatentDataset(test_latents, test_labels)
+    val_latent_dataset = LatentDataset(val_latents, val_labels)
 
 
-
-    mlp_epochs = 30
+    mlp_epochs = 50
     mlp_lr = 1e-3
-    mlp_batch_size = 256
+    mlp_batch_size = 256 
 
     # Create data loaders for latents
     train_latent_loader = DataLoader(train_latent_dataset, batch_size=mlp_batch_size, shuffle=True)
+    val_latent_loader = DataLoader(val_latent_dataset, batch_size=mlp_batch_size, shuffle=False)
     test_latent_loader = DataLoader(test_latent_dataset, batch_size=mlp_batch_size, shuffle=False)
 
 
@@ -232,6 +240,15 @@ def mnist_demo():
             loss.backward()
             mlp_optimizer.step()
             print(f"Epoch {epoch + 1}: train loss {loss.item()}")
+        
+        #get validation loss
+        mlp_model.eval()
+        with torch.no_grad():
+            for latents, labels in val_latent_loader:
+                outputs = mlp_model(latents)
+                loss = criterion(outputs, labels)
+                print(f"Epoch {epoch + 1}: val loss {loss.item()}")
+
             
 
     # Test the MLP model
@@ -249,14 +266,15 @@ def mnist_demo():
     
     #train random forest on the latent space
     
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.metrics import accuracy_score
 
-    clf = RandomForestClassifier()
+    clf = RandomForestClassifier(n_estimators=500)
     clf.fit(train_latents, train_labels)
     preds = clf.predict(test_latents)
     accuracy = accuracy_score(test_labels, preds)
     print(f"Random Forest Test Accuracy: {accuracy * 100}%")
 
 if __name__ == "__main__":
+    start = time.time()
     mnist_demo()
+    end = time.time()
+    print(f"Time taken: {end - start} seconds")
