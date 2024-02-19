@@ -197,6 +197,12 @@ def mnist_demo():
     test_latents = torch.cat(test_latents, dim=0)
     test_labels = torch.cat(test_labels, dim=0)
 
+
+    #stratified split of the data
+    from sklearn.model_selection import train_test_split
+    train_latents, _, train_labels, _ = train_test_split(train_latents, train_labels, test_size=0.98, stratify=train_labels)
+
+    print("Number of training samples: ", len(train_latents))
     # Load latents into datasets
     train_latent_dataset = LatentDataset(train_latents, train_labels)
     test_latent_dataset = LatentDataset(test_latents, test_labels)
