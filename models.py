@@ -145,7 +145,7 @@ def mnist_demo():
     hidden_channels = [32, 64, 128, 256, 512]
     lr = 1e-3
     beta = 1
-    vae_epochs = 10
+    vae_epochs = 30
     
 
     transform = T.Compose([T.Resize((32, 32)), T.ToTensor()])
@@ -200,7 +200,7 @@ def mnist_demo():
 
     #stratified split of the data
     from sklearn.model_selection import train_test_split
-    train_latents, _, train_labels, _ = train_test_split(train_latents, train_labels, test_size=0.98, stratify=train_labels)
+    train_latents, _, train_labels, _ = train_test_split(train_latents, train_labels, test_size=0.99, stratify=train_labels)
 
     print("Number of training samples: ", len(train_latents))
     # Load latents into datasets
@@ -209,7 +209,7 @@ def mnist_demo():
 
 
 
-    mlp_epochs = 20
+    mlp_epochs = 30
     mlp_lr = 1e-3
     mlp_batch_size = 256
 
@@ -231,6 +231,8 @@ def mnist_demo():
             mlp_optimizer.zero_grad()
             loss.backward()
             mlp_optimizer.step()
+            print(f"Epoch {epoch + 1}: train loss {loss.item()}")
+            
 
     # Test the MLP model
     with torch.no_grad():
