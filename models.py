@@ -275,6 +275,7 @@ def mnist_demo():
 
 if __name__ == "__main__":
     start = time.time()
+    print("starting")
     mnist_demo()
     end = time.time()
     print(f"Time taken: {end - start} seconds")
