@@ -107,12 +107,6 @@ def main():
         train_dataset = MNIST(args.data_dir, train=True, download=True, transform=transform)
         test_dataset = MNIST(args.data_dir, train=False, download=True, transform=transform)
 
-        #take 1% of the training data for debugging
-        train_dataset = torch.utils.data.Subset(train_dataset, torch.randperm(len(train_dataset))[:int(len(train_dataset)*0.01)])
-
-        #take 1% of the test data for debugging
-        test_dataset = torch.utils.data.Subset(test_dataset, torch.randperm(len(test_dataset))[:int(len(test_dataset)*0.01)])
-
     #make sure dir exists
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(f"{args.data_dir}/{args.dataset}", exist_ok=True)

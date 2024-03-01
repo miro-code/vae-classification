@@ -19,55 +19,6 @@ from models import VAE, MLP
 from datasets import LatentDataset
 
 
-class VAETrainer:
-    def __init__(self, model, optimizer, beta):
-        self.model = model
-        self.optimizer = optimizer
-        self.beta = beta
-
-    def loss_function(self, recon, x, mean, logvar):
-        recon_loss = nn.MSELoss(reduction='sum')(recon, x)
-        kl_loss = -0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())
-        return recon_loss + self.beta * kl_loss
-
-    def train_step(self, x):
-        self.optimizer.zero_grad()
-        recon, mean, logvar = self.model(x)
-        loss = self.loss_function(recon, x, mean, logvar)
-        loss.backward()
-        self.optimizer.step()
-        return loss.item()
-    
-
-def train_vae(batch_size = 256, latent_dim = 20, hidden_channels = [32, 64, 128, 256, 512], lr = 1e-3, beta = 1, vae_epochs = 100, save_freq = 10):
-    transform = T.Compose([T.Resize((32, 32)), T.ToTensor()])
-    mnist_train = MNIST("data/", train=True, download=True, transform=transform)
-    mnist_test = MNIST("data/", train=False, download=True, transform=transform)
-
-    #take 5% of the training data for debugging
-    #mnist_train = torch.utils.data.Subset(mnist_train, torch.randperm(len(mnist_train))[:int(len(mnist_train)*0.05)])
-
-    #take 5% of the test data for debugging
-    #mnist_test = torch.utils.data.Subset(mnist_test, torch.randperm(len(mnist_test))[:int(len(mnist_test)*0.05)])
-
-    train_loader = DataLoader(mnist_train, batch_size, shuffle=True)
-    test_loader = DataLoader(mnist_test, batch_size, shuffle=True)
-    model = VAE(1, latent_dim, (32, 32, 1), hidden_channels)
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    trainer = VAETrainer(model, optimizer, beta)
-
-    for epoch in range(vae_epochs):
-        loss_train = 0
-        for X, _ in train_loader:
-            loss = trainer.train_step(X)
-            loss_train += loss
-
-        print(f"Epoch {epoch + 1}: train loss {loss_train}")
-        if(epoch and epoch % save_freq == 0 or epoch == vae_epochs - 1):
-            torch.save(model.state_dict(), f"vae_epoch_{epoch}.pt")
-    return model
-
-
 def encode_data(model, data_loader):
     # Encode mnist_train and mnist_test into the latent space
     latents = []
@@ -171,12 +122,21 @@ if __name__ == "__main__":
     args.add_argument("--lr", type=float, default=1e-3)
     args.add_argument("--dataset", type=str, default="mnist")
     args.add_argument("--data_dir", type=str, default="data/")
+    args.add_argument("--n_samples", type=int, default=55)
     args = args.parse_args()
 
     train_latents = torch.load(f"{args.data_dir}/{args.dataset}/train_latents.pt")
     train_labels = torch.load(f"{args.data_dir}/{args.dataset}/train_labels.pt")
     test_latents = torch.load(f"{args.data_dir}/{args.dataset}/test_latents.pt")
     test_labels = torch.load(f"{args.data_dir}/{args.dataset}/test_labels.pt")
+
+    #do train\test split on the training data
+    #random permutation of training array
+    indices = torch.randperm(len(train_latents))
+    train_latents = train_latents[indices]
+    train_labels = train_labels[indices]
+    train_labels = train_labels[:args.n_samples]
+    train_latents = train_latents[:args.n_samples]
 
 
     print("Training mlp")
@@ -189,3 +149,4 @@ if __name__ == "__main__":
     start = time.time()
     train_rf(train_latents, train_labels, test_latents, test_labels)
     end = time.time()
+    print(f"Time taken: {end - start} seconds")

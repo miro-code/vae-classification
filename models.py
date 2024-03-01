@@ -1,15 +1,7 @@
 
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader
-import torchvision.transforms as T
-from torchvision.datasets import MNIST
 
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score
-
-import time
 
 class Encoder(nn.Module):
     def __init__(self, in_channels, latent_dim, hidden_channels):
@@ -95,25 +87,6 @@ class VAE(nn.Module):
         recon = self.decoder(z)
         return recon, mean, logvar
 
-class VAETrainer:
-    def __init__(self, model, optimizer, beta):
-        self.model = model
-        self.optimizer = optimizer
-        self.beta = beta
-
-    def loss_function(self, recon, x, mean, logvar):
-        recon_loss = nn.MSELoss(reduction='sum')(recon, x)
-        kl_loss = -0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())
-        return recon_loss + self.beta * kl_loss
-
-    def train_step(self, x):
-        self.optimizer.zero_grad()
-        recon, mean, logvar = self.model(x)
-        loss = self.loss_function(recon, x, mean, logvar)
-        loss.backward()
-        self.optimizer.step()
-        return loss.item()
-
 class MLP(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(MLP, self).__init__()
@@ -129,153 +102,4 @@ class MLP(nn.Module):
         x = self.fc3(x)
         return x
     
-from torch.utils.data import Dataset
 
-class LatentDataset(Dataset):
-    def __init__(self, latents, labels):
-        self.latents = latents
-        self.labels = labels
-
-    def __len__(self):
-        return len(self.latents)
-
-    def __getitem__(self, idx):
-        latent = self.latents[idx]
-        label = self.labels[idx]
-        return latent, label
-
-def mnist_demo():
-    batch_size = 256
-    latent_dim = 20
-    hidden_channels = [32, 64, 128, 256, 512]
-    lr = 1e-3
-    beta = 1
-    vae_epochs = 100
-    
-
-    transform = T.Compose([T.Resize((32, 32)), T.ToTensor()])
-    mnist_train = MNIST("data/", train=True, download=True, transform=transform)
-    mnist_test = MNIST("data/", train=False, download=True, transform=transform)
-
-    #take 5% of the training data
-    #mnist_train = torch.utils.data.Subset(mnist_train, torch.randperm(len(mnist_train))[:int(len(mnist_train)*0.05)])
-
-    #take 5% of the test data
-    #mnist_test = torch.utils.data.Subset(mnist_test, torch.randperm(len(mnist_test))[:int(len(mnist_test)*0.05)])
-
-    train_loader = DataLoader(mnist_train, batch_size, shuffle=True)
-    test_loader = DataLoader(mnist_test, batch_size, shuffle=True)
-    model = VAE(1, latent_dim, (32, 32, 1), hidden_channels)
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    trainer = VAETrainer(model, optimizer, beta)
-
-    for epoch in range(vae_epochs):
-        loss_train = 0
-        for X, _ in train_loader:
-            loss = trainer.train_step(X)
-            loss_train += loss
-
-        print(f"Epoch {epoch + 1}: train loss {loss_train}")
-
-    
-
-    # Encode mnist_train and mnist_test into the latent space
-    train_latents = []
-    train_labels = []
-    test_latents = []
-    test_labels = []
-
-    model.eval()
-    with torch.no_grad():
-        for data, labels in train_loader:
-            mean, _ = model.encoder(data)
-            train_latents.append(mean)
-            train_labels.append(labels)
-
-        for data, labels in test_loader:
-            mean, _ = model.encoder(data)
-            test_latents.append(mean)
-            test_labels.append(labels)
-
-    train_latents = torch.cat(train_latents, dim=0)
-    train_labels = torch.cat(train_labels, dim=0)
-    test_latents = torch.cat(test_latents, dim=0)
-    test_labels = torch.cat(test_labels, dim=0)
-
-
-    #stratified split of the data
-    from sklearn.model_selection import train_test_split
-    train_latents, val_latents, train_labels, val_labels = train_test_split(train_latents, train_labels, test_size=0.999, stratify=train_labels)
-    val_latents, _ , val_labels, _ = train_test_split(val_latents, val_labels, test_size=0.9, stratify=val_labels)
-
-    print("Number of training samples: ", len(train_latents))
-    print("Number of validation samples: ", len(val_latents))
-    # Load latents into datasets
-    train_latent_dataset = LatentDataset(train_latents, train_labels)
-    test_latent_dataset = LatentDataset(test_latents, test_labels)
-    val_latent_dataset = LatentDataset(val_latents, val_labels)
-
-
-    mlp_epochs = 50
-    mlp_lr = 1e-3
-    mlp_batch_size = 256 
-
-    # Create data loaders for latents
-    train_latent_loader = DataLoader(train_latent_dataset, batch_size=mlp_batch_size, shuffle=True)
-    val_latent_loader = DataLoader(val_latent_dataset, batch_size=mlp_batch_size, shuffle=False)
-    test_latent_loader = DataLoader(test_latent_dataset, batch_size=mlp_batch_size, shuffle=False)
-
-
-    # Train a simple MLP to classify the latent space
-    mlp_model = MLP(latent_dim, 10)
-    mlp_optimizer = optim.Adam(mlp_model.parameters(), lr=mlp_lr)
-    criterion = nn.CrossEntropyLoss()
-
-    for epoch in range(mlp_epochs):
-        mlp_model.train()
-        for latents, labels in train_latent_loader:
-            outputs = mlp_model(latents)
-            loss = criterion(outputs, labels)
-            mlp_optimizer.zero_grad()
-            loss.backward()
-            mlp_optimizer.step()
-            print(f"Epoch {epoch + 1}: train loss {loss.item()}")
-        
-        #get validation loss
-        mlp_model.eval()
-        with torch.no_grad():
-            for latents, labels in val_latent_loader:
-                outputs = mlp_model(latents)
-                loss = criterion(outputs, labels)
-                print(f"Epoch {epoch + 1}: val loss {loss.item()}")
-
-            
-
-    # Test the MLP model
-    with torch.no_grad():
-        mlp_model.eval()
-        correct = 0
-        total = 0
-        for latents, labels in test_latent_loader:
-            outputs = mlp_model(latents)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-
-        print(f"MLP Test Accuracy: {100 * correct / total}%")
-    
-    #train random forest on the latent space
-    
-
-    clf = RandomForestClassifier(n_estimators=500)
-    clf.fit(train_latents, train_labels)
-    preds = clf.predict(test_latents)
-    accuracy = accuracy_score(test_labels, preds)
-    print(f"Random Forest Test Accuracy: {accuracy * 100}%")
-
-if __name__ == "__main__":
-    start = time.time()
-    print("starting")
-    mnist_demo()
-    end = time.time()
-    print(f"Time taken: {end - start} seconds")
