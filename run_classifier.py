@@ -39,10 +39,10 @@ def encode_data(model, data_loader):
 def train_mlp(train_latents, train_labels, test_latents, test_labels, latent_dim, epochs = 50, lr = 1e-3, batch_size = 256):
     #stratified split of the data
     from sklearn.model_selection import train_test_split
-    train_latents, val_latents , train_labels, val_labels = train_test_split(train_latents, train_labels, test_size=0.1, stratify=train_labels)
+    test_latents, val_latents , test_latents, val_labels = train_test_split(test_latents, test_labels, test_size=0.1, stratify=test_labels)
 
     print("Number of training samples: ", len(train_latents))
-    print("Number of validation samples: ", len(val_latents))
+    print("Number of validation samples split from test set for tracking: ", len(val_latents))
     # Load latents into datasets
     train_latent_dataset = LatentDataset(train_latents, train_labels)
     test_latent_dataset = LatentDataset(test_latents, test_labels)
@@ -78,7 +78,7 @@ def train_mlp(train_latents, train_labels, test_latents, test_labels, latent_dim
             for latents, labels in val_latent_loader:
                 outputs = model(latents)
                 loss = criterion(outputs, labels)
-                print(f"Epoch {epoch + 1}: val loss {loss.item()}")
+                print(f"Epoch {epoch + 1}: val loss {loss.item()} (val split from test set)")
 
             
 

@@ -14,7 +14,7 @@ from models import VAE
 
 import argparse
 import os
-
+import time
 
 class VAETrainer:
     def __init__(self, model, optimizer, beta):
@@ -111,7 +111,10 @@ def main():
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(f"{args.data_dir}/{args.dataset}", exist_ok=True)
     
+    start_time = time.time() 
     vae = train_vae(args.batch_size, args.latent_dim, args.hidden_channels, args.lr, args.beta, args.epochs, args.save_freq, train_dataset, test_dataset, args.model_dir, device)
+    stop_time = time.time()
+    print(f"VAE Training took {stop_time - start_time} seconds")
     train_latens, train_labels = encode_data(vae, train_dataset, device=device)
     test_latens, test_labels = encode_data(vae, test_dataset, device=device)
 
