@@ -153,6 +153,11 @@ if __name__ == "__main__":
     train_labels = train_labels[:args.n_samples]
     train_latents = train_latents[:args.n_samples]
 
+    print("Training random forest")
+    start = time.time()
+    train_rf(train_latents, train_labels, test_latents, test_labels)
+    end = time.time()
+    print(f"Time taken: {end - start} seconds")
 
     print("Training mlp")
     start = time.time()
@@ -160,8 +165,4 @@ if __name__ == "__main__":
     end = time.time()
     print(f"Time taken: {end - start} seconds")
 
-    print("Training random forest")
-    start = time.time()
-    train_rf(train_latents, train_labels, test_latents, test_labels)
-    end = time.time()
-    print(f"Time taken: {end - start} seconds")
+    
