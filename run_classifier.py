@@ -15,9 +15,12 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import accuracy_score
 import time
 import argparse
-from models import VAE, MLP
+from models import MLP
 from datasets import LatentDataset
 
+from sklearn.metrics import confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 def encode_data(model, data_loader):
     # Encode mnist_train and mnist_test into the latent space
@@ -83,6 +86,7 @@ def train_mlp(train_latents, train_labels, test_latents, test_labels, latent_dim
             
 
     # Test the MLP model
+    #test_preds = [] TODO
     with torch.no_grad():
         model.eval()
         correct = 0
@@ -90,12 +94,22 @@ def train_mlp(train_latents, train_labels, test_latents, test_labels, latent_dim
         for latents, labels in test_latent_loader:
             outputs = model(latents)
             _, predicted = torch.max(outputs.data, 1)
+            #test_preds.append(predicted)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
 
         print(f"MLP Test Accuracy: {100 * correct / total}%")
+
+    #create_confusion_matrix(test_preds, test_labels, "rf_confusion_matrix.png") TODO
     
-    #train random forest on the latent space
+def create_confusion_matrix(predictions, labels, save_path):
+    cm = confusion_matrix(labels, predictions)
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', cbar=False)
+    plt.xlabel('Predicted labels')
+    plt.ylabel('True labels')
+    plt.title('Confusion Matrix')
+    plt.savefig(save_path)
     
 
 def train_rf(train_latents, train_labels, test_latents, test_labels):
@@ -112,6 +126,7 @@ def train_rf(train_latents, train_labels, test_latents, test_labels):
     test_acc = accuracy_score(test_labels, test_preds)
     print(f"Train accuracy: {train_acc}")
     print(f"Test accuracy: {test_acc}")
+    create_confusion_matrix(test_preds, test_labels, "rf_confusion_matrix.png")
     
 
 if __name__ == "__main__":
