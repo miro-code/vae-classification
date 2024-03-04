@@ -115,8 +115,8 @@ def create_confusion_matrix(predictions, labels, save_path):
 
 def train_rf(train_latents, train_labels, test_latents, test_labels):
     search_params = {
-        "n_estimators": [100, 250, 500],
-        "min_samples_split": [2, 5, 10],
+        "n_estimators": [100, 150, 200, 250, 300, 400, 500],
+        "min_samples_split": [2,3, 5, 7, 10],
     }
     clf = GridSearchCV(RandomForestClassifier(), search_params)
     clf.fit(train_latents, train_labels)
