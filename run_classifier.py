@@ -22,6 +22,8 @@ from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from sklearn.model_selection import train_test_split
+
 def encode_data(model, data_loader):
     # Encode mnist_train and mnist_test into the latent space
     latents = []
@@ -41,8 +43,7 @@ def encode_data(model, data_loader):
 
 def train_mlp(train_latents, train_labels, test_latents, test_labels, latent_dim, epochs = 50, lr = 1e-3, batch_size = 256):
     #stratified split of the data
-    from sklearn.model_selection import train_test_split
-    test_latents, val_latents , test_latents, val_labels = train_test_split(test_latents, test_labels, test_size=0.1, stratify=test_labels)
+    test_latents, val_latents , test_labels, val_labels = train_test_split(test_latents, test_labels, test_size=0.1, stratify=test_labels)
 
     print("Number of training samples: ", len(train_latents))
     print("Number of validation samples split from test set for tracking: ", len(val_latents))
@@ -161,6 +162,7 @@ if __name__ == "__main__":
 
     print("Training mlp")
     start = time.time()
+    print("shapes for debugging", train_latents.shape, train_labels.shape)
     train_mlp(train_latents, train_labels, test_latents, test_labels, args.latent_dim, args.epochs, args.lr, args.batch_size)
     end = time.time()
     print(f"Time taken: {end - start} seconds")
