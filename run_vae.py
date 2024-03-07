@@ -83,6 +83,19 @@ def encode_data(model, dataset, batch_size = 256, device = "cpu"):
     labels = torch.cat(labels, dim=0)
     return latents, labels
 
+def evaluate_vae(model, dataset, batch_size = 256, device = "cpu"):
+    dataloader = DataLoader(dataset, batch_size, shuffle=False)
+    model = model.to(device)
+    model.eval()
+    loss_total = 0.0
+    with torch.no_grad():
+        for batch_data, _ in dataloader:
+            batch_data = batch_data.to(device)
+            recon, mean, logvar = model(batch_data)
+            loss = model.loss_function(recon, batch_data, mean, logvar)
+            loss_total += loss.item()
+    return loss_total
+
 
 def main():
     args = argparse.ArgumentParser()
@@ -115,14 +128,52 @@ def main():
     vae = train_vae(args.batch_size, args.latent_dim, args.hidden_channels, args.lr, args.beta, args.epochs, args.save_freq, train_dataset, test_dataset, args.model_dir, device)
     stop_time = time.time()
     print(f"VAE Training took {stop_time - start_time} seconds")
-    train_latens, train_labels = encode_data(vae, train_dataset, device=device)
-    test_latens, test_labels = encode_data(vae, test_dataset, device=device)
+    #train_latens, train_labels = encode_data(vae, train_dataset, device=device)
+    #test_latens, test_labels = encode_data(vae, test_dataset, device=device)
 
     #save to data_dir
-    torch.save(train_latens, f"{args.data_dir}/{args.dataset}/train_latents.pt")
-    torch.save(train_labels, f"{args.data_dir}/{args.dataset}/train_labels.pt")
-    torch.save(test_latens, f"{args.data_dir}/{args.dataset}/test_latents.pt")
-    torch.save(test_labels, f"{args.data_dir}/{args.dataset}/test_labels.pt")
+    #torch.save(train_latens, f"{args.data_dir}/{args.dataset}/train_latents.pt")
+    #torch.save(train_labels, f"{args.data_dir}/{args.dataset}/train_labels.pt")
+    #torch.save(test_latens, f"{args.data_dir}/{args.dataset}/test_latents.pt")
+    #torch.save(test_labels, f"{args.data_dir}/{args.dataset}/test_labels.pt")
+    vae_loss = evaluate_vae(vae, test_dataset, device=device)
+    print(f"VAE Loss on test set: {vae_loss}")
+
+    #freeze encoder and train vae
+    for param in vae.encoder.parameters():
+        param.requires_grad = False
+
+    train_loader = DataLoader(train_dataset, args.batch_size, shuffle=True)
+    trainer = VAETrainer(vae, optimizer, args.beta)
+    optimizer = optim.Adam(vae.parameters(), lr=args.lr)
+
+    model_dicts = []   
+    for epoch in range(5):
+        loss_train = 0
+        for X, _ in train_loader:
+            X = X.to(device)
+            loss = trainer.train_step(X)
+            loss_train += loss
+        print(f"Epoch {epoch + 1}: train loss {loss_train}")
+        vae_state = {key: value.cpu() for key, value in vae.state_dict().items()}
+        model_dicts.append(vae_state)
+    
+    # Accumulate states
+    if avg_encoder_state is None:
+        avg_encoder_state = vae_state
+    else:
+        for key in avg_encoder_state:
+            avg_encoder_state[key] += vae_state[key]
+
+    for key in avg_encoder_state:
+        avg_encoder_state[key] = torch.div(avg_encoder_state[key], float(5))
+    
+    # Load the average state
+    vae.load_state_dict(avg_encoder_state)
+    vae_loss = evaluate_vae(vae, test_dataset, device=device)
+    print(f"VAE Loss on test set after: {vae_loss}")
+
+
 
 if __name__ == "__main__":
     main()
