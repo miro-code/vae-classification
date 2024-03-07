@@ -35,6 +35,21 @@ class VAETrainer:
         self.optimizer.step()
         return loss.item()
     
+    def evaluate_vae(self, model, dataset, batch_size = 256, device = "cpu"):
+        dataloader = DataLoader(dataset, batch_size, shuffle=False)
+        model = model.to(device)
+        model.eval()
+        loss_total = 0.0
+        with torch.no_grad():
+            for batch_data, _ in dataloader:
+                batch_data = batch_data.to(device)
+                recon, mean, logvar = model(batch_data)
+                loss = self.loss_function(recon, batch_data, mean, logvar)
+                loss_total += loss.item()
+        return loss_total
+
+
+    
 
 def train_vae(batch_size, latent_dim, hidden_channels, lr, beta, vae_epochs, save_freq, train_dataset, val_dataset, model_dir, device):
     train_loader = DataLoader(train_dataset, batch_size, shuffle=True)
@@ -83,19 +98,6 @@ def encode_data(model, dataset, batch_size = 256, device = "cpu"):
     labels = torch.cat(labels, dim=0)
     return latents, labels
 
-def evaluate_vae(model, dataset, batch_size = 256, device = "cpu"):
-    dataloader = DataLoader(dataset, batch_size, shuffle=False)
-    model = model.to(device)
-    model.eval()
-    loss_total = 0.0
-    with torch.no_grad():
-        for batch_data, _ in dataloader:
-            batch_data = batch_data.to(device)
-            recon, mean, logvar = model(batch_data)
-            loss = model.loss_function(recon, batch_data, mean, logvar)
-            loss_total += loss.item()
-    return loss_total
-
 
 def main():
     args = argparse.ArgumentParser()
@@ -136,7 +138,7 @@ def main():
     #torch.save(train_labels, f"{args.data_dir}/{args.dataset}/train_labels.pt")
     #torch.save(test_latens, f"{args.data_dir}/{args.dataset}/test_latents.pt")
     #torch.save(test_labels, f"{args.data_dir}/{args.dataset}/test_labels.pt")
-    vae_loss = evaluate_vae(vae, test_dataset, device=device)
+    vae_loss = trainer.evaluate_vae(vae, test_dataset, device=device)
     print(f"VAE Loss on test set: {vae_loss}")
 
     #freeze encoder and train vae
@@ -170,7 +172,7 @@ def main():
     
     # Load the average state
     vae.load_state_dict(avg_encoder_state)
-    vae_loss = evaluate_vae(vae, test_dataset, device=device)
+    vae_loss = trainer.evaluate_vae(vae, test_dataset, device=device)
     print(f"VAE Loss on test set after: {vae_loss}")
 
 
