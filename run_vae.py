@@ -138,8 +138,7 @@ def main():
     #torch.save(train_labels, f"{args.data_dir}/{args.dataset}/train_labels.pt")
     #torch.save(test_latens, f"{args.data_dir}/{args.dataset}/test_latents.pt")
     #torch.save(test_labels, f"{args.data_dir}/{args.dataset}/test_labels.pt")
-    vae_loss = trainer.evaluate_vae(vae, test_dataset, device=device)
-    print(f"VAE Loss on test set: {vae_loss}")
+    
 
     #freeze encoder and train vae
     for param in vae.encoder.parameters():
@@ -149,6 +148,8 @@ def main():
     trainer = VAETrainer(vae, optimizer, args.beta)
     optimizer = optim.Adam(vae.parameters(), lr=args.lr)
 
+    vae_loss = trainer.evaluate_vae(vae, test_dataset, device=device)
+    print(f"VAE Loss on test set: {vae_loss}")
     model_dicts = []   
     for epoch in range(5):
         loss_train = 0
