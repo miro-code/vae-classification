@@ -1,5 +1,7 @@
 data/
+data_backup/
 models/
 __pycache__/
 launch.json
 rf_confusion_matrix.png
+results/

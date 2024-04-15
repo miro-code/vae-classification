@@ -1,3 +1,6 @@
+from sklearn.metrics import accuracy_score
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GridSearchCV
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -15,6 +18,8 @@ from models import VAE
 import argparse
 import os
 import time
+
+from PIL import Image
 
 class VAETrainer:
     def __init__(self, model, optimizer, beta):
@@ -40,6 +45,8 @@ class VAETrainer:
         model = model.to(device)
         model.eval()
         loss_total = 0.0
+        #Debug 
+        misclassified = []
         with torch.no_grad():
             for batch_data, _ in dataloader:
                 batch_data = batch_data.to(device)
@@ -83,20 +90,26 @@ def train_vae(batch_size, latent_dim, hidden_channels, lr, beta, vae_epochs, sav
 def encode_data(model, dataset, batch_size = 256, device = "cpu"):
     # Encode mnist_train and mnist_test into the latent space
     dataloader = DataLoader(dataset, batch_size, shuffle=False)
+    images = []
     latents = []
     labels = []
+    recon = []
     model = model.to(device)
     model.eval()
     with torch.no_grad():
         for batch_data, batch_labels in dataloader:
+            images.append(batch_data)
             batch_data = batch_data.to(device)
             mean, _ = model.encoder(batch_data)
+            recon.append(model.decoder(mean).detach().cpu())
             latents.append(mean.detach().cpu())
             labels.append(batch_labels)
 
     latents = torch.cat(latents, dim=0)
     labels = torch.cat(labels, dim=0)
-    return latents, labels
+    images = torch.cat(images, dim=0)
+    recon = torch.cat(recon, dim=0)
+    return latents, labels, images, recon
 
 
 def main():
@@ -130,14 +143,14 @@ def main():
     vae = train_vae(args.batch_size, args.latent_dim, args.hidden_channels, args.lr, args.beta, args.epochs, args.save_freq, train_dataset, test_dataset, args.model_dir, device)
     stop_time = time.time()
     print(f"VAE Training took {stop_time - start_time} seconds")
-    #train_latens, train_labels = encode_data(vae, train_dataset, device=device)
-    #test_latens, test_labels = encode_data(vae, test_dataset, device=device)
+    train_latents, train_labels, _, _ = encode_data(vae, train_dataset, device=device)
+    test_latents, test_labels, test_images, test_recon_images = encode_data(vae, test_dataset, device=device)
 
     #save to data_dir
-    #torch.save(train_latens, f"{args.data_dir}/{args.dataset}/train_latents.pt")
-    #torch.save(train_labels, f"{args.data_dir}/{args.dataset}/train_labels.pt")
-    #torch.save(test_latens, f"{args.data_dir}/{args.dataset}/test_latents.pt")
-    #torch.save(test_labels, f"{args.data_dir}/{args.dataset}/test_labels.pt")
+    torch.save(train_latents, f"{args.data_dir}/{args.dataset}/train_latents.pt")
+    torch.save(train_labels, f"{args.data_dir}/{args.dataset}/train_labels.pt")
+    torch.save(test_latents, f"{args.data_dir}/{args.dataset}/test_latents.pt")
+    torch.save(test_labels, f"{args.data_dir}/{args.dataset}/test_labels.pt")
     
 
     #freeze encoder and train vae
@@ -145,9 +158,12 @@ def main():
         param.requires_grad = False
 
     train_loader = DataLoader(train_dataset, args.batch_size, shuffle=True)
-    trainer = VAETrainer(vae, optimizer, args.beta)
     optimizer = optim.Adam(vae.parameters(), lr=args.lr)
+    trainer = VAETrainer(vae, optimizer, args.beta)
+    
 
+    """
+    model averaging
     vae_loss = trainer.evaluate_vae(vae, test_dataset, device=device)
     print(f"VAE Loss on test set: {vae_loss}")
     model_dicts = []   
@@ -175,8 +191,85 @@ def main():
     vae.load_state_dict(avg_encoder_state)
     vae_loss = trainer.evaluate_vae(vae, test_dataset, device=device)
     print(f"VAE Loss on test set after: {vae_loss}")
+    """
+
+    #TODO remove
+    rf = train_rf(train_latents, train_labels, test_latents, test_labels)
+    missclassified = [[] for _ in range(10)]
+    correctlyclassified = [[] for _ in range(10)]
+    test_preds = rf.predict(test_latents)
+    for j in range(len(test_preds)):
+        if test_preds[j] != test_labels[j]:
+            missclassified[test_labels[j]].append(((test_images[j], test_preds[j], test_recon_images[j])))
+        else:
+            correctlyclassified[test_labels[j]].append((test_images[j], test_preds[j], test_recon_images[j]))
+
+        if(len(missclassified[test_labels[j]]) > 10 and len(correctlyclassified[test_labels[j]]) > 10):
+            break
+
+    #save 2 samples each to results/
+    os.makedirs("results", exist_ok=True)
+    for i in range(10):
+        for example in range(2):
+            folder_name = os.path.join("results", f"label_{i}")
+            os.makedirs(folder_name, exist_ok=True)
+            if missclassified[i]:
+                image, pred_label, recon_image = missclassified[i].pop()
+                filename = os.path.join(folder_name, f"misclassified_as_{pred_label}_example_{example}.png")
+                transform_save(image, filename)
+                filename = os.path.join(folder_name, f"misclassified_as_{pred_label}_example_{example}_recon.png")
+                transform_save(recon_image, filename)
+            if correctlyclassified[i]:
+                image, pred_label, recon_image = correctlyclassified[i].pop()
+                filename = os.path.join(folder_name, f"correct_example_{example}.png")
+                transform_save(image, filename)
+            
 
 
+    
+    
+
+        
+        
+
+#TODO: remove
+def train_rf(train_latents, train_labels, test_latents, test_labels):
+    search_params = {
+        "n_estimators": [100, 150, 200, 250, 300, 400, 500],
+        "min_samples_split": [2,3, 5, 7, 10],
+    }
+    clf = GridSearchCV(RandomForestClassifier(), search_params)
+    clf.fit(train_latents, train_labels)
+    print(f"Best parameters: {clf.best_params_}")
+    train_preds = clf.predict(train_latents)
+    test_preds = clf.predict(test_latents)
+    train_acc = accuracy_score(train_labels, train_preds)
+    test_acc = accuracy_score(test_labels, test_preds)
+    print(f"Train accuracy: {train_acc}")
+    print(f"Test accuracy: {test_acc}")
+    return clf
+
+def transform_save(image, filename):
+    """
+    Saves a PyTorch tensor as a PNG image.
+
+    Args:
+    image (torch.Tensor): The image tensor to save. Expecting a tensor of shape (C, H, W).
+    filename (str): The path where the image should be saved, including the filename.
+    """    
+    if torch.max(image) <= 1:
+        image *= 255
+    # Convert the tensor to a PIL Image
+    # Note: Assuming the image tensor is in CxHxW format and 'C' is either 1 (grayscale) or 3 (RGB)
+    image = image.byte()  # Convert to uint8
+    if image.shape[0] == 1:
+        # Handle grayscale images that might be expected as 1xHxW
+        image = image.squeeze(0)  # Remove channel dimension if it's single-channel
+    img_pil = Image.fromarray(image.numpy(), 'L' if image.ndim == 2 else 'RGB')
+    
+    # Save the image
+    img_pil.save(filename, format='PNG')
+    print(f"Image saved as {filename}")
 
 if __name__ == "__main__":
     main()

@@ -24,6 +24,7 @@ import seaborn as sns
 
 from sklearn.model_selection import train_test_split
 
+#I dont remember what this is for TODO delete
 def encode_data(model, data_loader):
     # Encode mnist_train and mnist_test into the latent space
     latents = []
@@ -128,6 +129,13 @@ def train_rf(train_latents, train_labels, test_latents, test_labels):
     print(f"Train accuracy: {train_acc}")
     print(f"Test accuracy: {test_acc}")
     create_confusion_matrix(test_preds, test_labels, "rf_confusion_matrix.png")
+    #For each class select two misclassified examples
+    misclassified = []
+    for i in range(len(test_labels)):
+        if test_labels[i] != test_preds[i]:
+            misclassified.append(test_latents[i])
+            if len(misclassified) == 10:
+                break
     
 
 if __name__ == "__main__":
